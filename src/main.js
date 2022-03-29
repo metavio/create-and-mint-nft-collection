@@ -114,9 +114,9 @@ const layersSetup = (layersOrder) => {
   return layers;
 };
 
-const saveImage = (_editionCount) => {
+const saveImage = (prefix, _editionCount) => {
   fs.writeFileSync(
-    `${FOLDERS.imagesDir}/${_editionCount}.png`,
+    `${FOLDERS.imagesDir}/${prefix ?? ''}${_editionCount}.png`,
     canvas.toBuffer("image/png")
   );
 };
@@ -132,13 +132,13 @@ const drawBackground = () => {
   ctx.fillRect(0, 0, format.width, format.height);
 };
 
-const addMetadata = (_dna, _edition) => {
+const addMetadata = (_dna, prefix, _edition) => {
   let dateTime = Date.now();
   let tempMetadata = {
     name: `${NFT_DETAILS.namePrefix} #${_edition}`,
     description: `${NFT_DETAILS.description}`,
-    file_url: `${NFT_DETAILS.imageFilesBase}/${_edition}.png`,
-    image: `${NFT_DETAILS.imageFilesBase}/${_edition}.png`,
+    file_url: `${NFT_DETAILS.imageFilesBase}/${prefix ?? ''}${_edition}.png`,
+    image: `${NFT_DETAILS.imageFilesBase}/${prefix ?? ''}${_edition}.png`,
     attributes: attributesList,
     custom_fields: {
       dna: sha1(_dna),
@@ -188,7 +188,7 @@ const addAttributes = (_element) => {
   let selectedElement = _element.layer.selectedElement;
   let ignore = false;
 
-  console.log("Debug - noLayerMeta: " + _element.layer.noLayerMeta);
+  // console.log("Debug - noLayerMeta: " + _element.layer.noLayerMeta);
   if (_element.layer.noLayerMeta !== undefined && _element.layer.noLayerMeta) {
     ignore = true;
   }
@@ -224,6 +224,45 @@ const loadLayerImg = async (_layer) => {
   } catch (error) {
     console.error("Error loading image:", error);
   }
+};
+
+const loadAndPrepareBadges = async () => {
+  if (!fs.existsSync(FOLDERS.badgesDir))
+    return [undefined];  
+
+  const badges = await Promise.all(fs.readdirSync(FOLDERS.badgesDir).filter(i => !/(^|\/)\.[^\/\.]/g.test(i)).map(async i => {
+    const index = Number.parseInt(i.replace('.png', ''));
+    if (Number.isNaN(index))
+      throw new Error(`Badge names must be numbers!`);
+    const path = `${FOLDERS.badgesDir}/${i}`;
+    const image = await loadImage(path);
+    return {
+      index,
+      prefix: `${index}/`,
+      layer: {
+        selectedElement: {
+          path: path,
+          name: i
+        },
+        name: 'Badge',
+        blend: 'source-over',
+        opacity: 1,
+        noLayerMeta: true
+      }, 
+      loadedImage: image 
+    }
+  }));
+
+  for (let i = 0; i < badges.length; i++)
+    if (badges[i].index !== i)
+      throw new Error(`Badges must be integers from 0 to badges.length - 1!`);
+  
+  badges.forEach(b => {
+    fs.mkdirSync(`${FOLDERS.jsonDir}/${b.prefix}`);
+    fs.mkdirSync(`${FOLDERS.imagesDir}/${b.prefix}`);
+  });
+
+  return badges;
 };
 
 const addText = (_sig, x, y, size) => {
@@ -363,7 +402,7 @@ const writeMetaData = (_data) => {
   fs.writeFileSync(`${FOLDERS.jsonDir}/_metadata.json`, _data);
 };
 
-const saveMetaDataSingleFile = (_editionCount) => {
+const saveMetaDataSingleFile = (prefix, _editionCount) => {
   let metadata = metadataList.find((meta) => meta.custom_fields.edition == _editionCount);
   debugLogs
     ? console.log(
@@ -371,7 +410,7 @@ const saveMetaDataSingleFile = (_editionCount) => {
       )
     : null;
   fs.writeFileSync(
-    `${FOLDERS.jsonDir}/${_editionCount}.json`,
+    `${FOLDERS.jsonDir}/${prefix ?? ''}${_editionCount}.json`,
     JSON.stringify(metadata, null, 2)
   );
 };
@@ -396,6 +435,7 @@ const startCreating = async () => {
   let failedCount = 0;
   let abstractedIndexes = [];
   const _startCollectionEditionFrom = Number(NFT_DETAILS.startCollectionEditionFrom);
+  const badges = await loadAndPrepareBadges();
   for (
     let i =
       network == NETWORK.sol
@@ -455,46 +495,60 @@ const startCreating = async () => {
         });
 
         await Promise.all(loadedElements).then((renderObjectArray) => {
-          debugLogs ? console.log("Clearing canvas") : null;
-          ctx.clearRect(0, 0, format.width, format.height);
-          if (gif.export) {
-            hashlipsGiffer = new HashlipsGiffer(
-              canvas,
-              ctx,
-              `${FOLDERS.gifsDir}/${abstractedIndexes[0]}.gif`,
-              gif.repeat,
-              gif.quality,
-              gif.delay
-            );
-            hashlipsGiffer.start();
-          }
-          if (background.generate) {
-            drawBackground();
-          }
-          renderObjectArray.forEach((renderObject, index) => {
-            drawElement(
-              renderObject,
-              index,
-              layerConfigurations[layerConfigIndex].layersOrder.length
-            );
+          for (let i = 0; i < badges.length; i++) {
+            debugLogs ? console.log("Clearing canvas") : null;
+            ctx.clearRect(0, 0, format.width, format.height);
             if (gif.export) {
-              hashlipsGiffer.add();
+              hashlipsGiffer = new HashlipsGiffer(
+                canvas,
+                ctx,
+                `${FOLDERS.gifsDir}/${abstractedIndexes[0]}.gif`,
+                gif.repeat,
+                gif.quality,
+                gif.delay
+              );
+              hashlipsGiffer.start();
             }
-          });
-          if (gif.export) {
-            hashlipsGiffer.stop();
+            if (background.generate) {
+              drawBackground();
+            }
+            renderObjectArray.forEach((renderObject, index) => {
+              drawElement(
+                renderObject,
+                index,
+                layerConfigurations[layerConfigIndex].layersOrder.length
+              );
+              if (gif.export) {
+                hashlipsGiffer.add();
+              }
+            });
+            if (badges[i]) {
+              drawElement(
+                badges[i],
+                renderObjectArray.length,
+                layerConfigurations[layerConfigIndex].layersOrder.length
+              );
+              if (gif.export) {
+                hashlipsGiffer.add();
+              }
+            }
+            if (gif.export) {
+              hashlipsGiffer.stop();
+            }
+            debugLogs
+              ? console.log("Editions left to create: ", abstractedIndexes)
+              : null;
+            saveImage(badges[i]?.prefix, abstractedIndexes[0]);
+            if (i === 0)
+              addMetadata(newDna, badges[i]?.prefix, abstractedIndexes[0]);
+            saveMetaDataSingleFile(badges[i]?.prefix, abstractedIndexes[0]);
+            if (i === 0)
+              console.log(
+                `Created edition: ${abstractedIndexes[0]}, with DNA: ${sha1(
+                  newDna
+                )} (tries: ${failedCount})`
+              );
           }
-          debugLogs
-            ? console.log("Editions left to create: ", abstractedIndexes)
-            : null;
-          saveImage(abstractedIndexes[0]);
-          addMetadata(newDna, abstractedIndexes[0]);
-          saveMetaDataSingleFile(abstractedIndexes[0]);
-          console.log(
-            `Created edition: ${abstractedIndexes[0]}, with DNA: ${sha1(
-              newDna
-            )} (tries: ${failedCount})`
-          );
         });
         dnaList.add(filterDNAOptions(newDna));
         selectedTraitsList.add(traits);

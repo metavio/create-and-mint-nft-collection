@@ -65,7 +65,7 @@ const dependentTraitsUsed = (newTraits, dependentTraits) => {
     if (totalDependencyLayerItemScore === actualDependencyLayerItemScore) {
         return false
     } else {
-        console.log(`Combination of traits filtered because of dependent traits filtration rule! Only ${actualDependencyLayerItemScore}/${totalDependencyLayerItemScore} dependent layers were found.`);
+        // console.log(`Combination of traits filtered because of dependent traits filtration rule! Only ${actualDependencyLayerItemScore}/${totalDependencyLayerItemScore} dependent layers were found.`);
         return true
     }
 };

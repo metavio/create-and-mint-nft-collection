@@ -49,12 +49,16 @@ build/Release
 
 # Dependency directories
 
+layers_new/
+badges/
 build/
 dist/
 node_modules/
 jspm_packages/
+src/config_new.js
 yarn.lock
 package-lock.json
+export.csv
 
 # TypeScript v1 declaration files
 
