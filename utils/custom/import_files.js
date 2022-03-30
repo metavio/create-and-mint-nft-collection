@@ -15,7 +15,12 @@ async function getFiles() {
         private_key: process.env.private_key,
     });
 
-    const { folders } = await drive.listFolders(null, null, true);
+    let lastFoldersResponse;
+    const folders = [];
+    do {
+        lastFoldersResponse = await drive.listFolders(null, lastFoldersResponse?.nextPageToken, true);
+        folders.push(...lastFoldersResponse.folders);
+    } while (lastFoldersResponse.nextPageToken);
     function resolvePath(resource, ignore_self) {
         if (resource.id === process.env.drive_root_id)
             return BASEDIR;
@@ -24,7 +29,12 @@ async function getFiles() {
         return join(resolvePath(parent), ignore_self ? '' : resource.name);
     }
 
-    const { files } = await drive.listFiles(null, null, true);
+    let listFilesResponse;
+    const files = [];
+    do {
+        listFilesResponse = await drive.listFiles(null, listFilesResponse?.nextPageToken, true);
+        files.push(...listFilesResponse.files);
+    } while (listFilesResponse.nextPageToken);
 
     folders.forEach(folder => {
         const path = resolvePath(folder);
