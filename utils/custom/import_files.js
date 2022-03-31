@@ -5,10 +5,54 @@ const { join } = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
+async function list({
+    fileId = ROOT_FOLDER,
+    pageToken = null,
+    recursive = false,
+    includeRemoved = false,
+    fields = 'nextPageToken, files(id, name, parents, mimeType, modifiedTime)',
+    q = '()',
+    orderBy = null,
+    spaces = 'drive',
+    pageSize = 100,
+    supportsTeamDrives = false,
+    teamDriveId = ''
+} = {}) {
+    q += recursive === false ? `AND ('${fileId}' in parents)` : '';
+
+    //console.log({q});
+    let request = {
+        fileId,
+        pageToken,
+        recursive,
+        includeRemoved,
+        fields,
+        q,
+        spaces,
+        pageSize,
+        supportsTeamDrives,
+        teamDriveId,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        corpora: 'allDrives'
+    };
+
+    return this.service.files
+        .listAsync(request)
+        .then(function(response) {
+            require('debug')(`node-google-drive:index`)('Found %s elements', response.files.length);
+            response.parentFolder = fileId;
+            return response;
+        })
+        .catch(function(err) {
+            require('debug')(`node-google-drive:index`)('Error listing files ', err.message);
+            throw err;
+        });
+};
+
 async function getFiles() {
-    const drive = new NodeGoogleDrive({
-        ROOT_FOLDER: process.env.drive_root_id
-    });
+    const drive = new NodeGoogleDrive();
+    drive.list = list;
 
     await drive.useServiceAccountAuth({
         client_email: process.env.client_email,
@@ -16,7 +60,9 @@ async function getFiles() {
     });
 
     let lastFoldersResponse;
-    const folders = [];
+    const folders = [{
+        id: process.env.drive_root_id
+    }];
     do {
         lastFoldersResponse = await drive.listFolders(null, lastFoldersResponse?.nextPageToken, true);
         folders.push(...lastFoldersResponse.folders);
