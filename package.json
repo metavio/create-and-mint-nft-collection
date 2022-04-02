@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "node index.js",
-    "build_with_downloads": "node utils/custom/import_files.js && node utils/custom/import_layers_csv.js && node index.js",
+    "build_with_downloads": "node utils/custom/import_files.js && node utils/custom/import_new_config.js && node index.js",
     "batch_ipfs_metas_migration": "node utils/custom/batch_ipfs_metas_migration.js",
     "check_mints": "node utils/custom/check_mints.js",
     "check_mints_batch": "node utils/custom/check_mints_batch.js",
@@ -23,7 +23,7 @@
     "generate": "node index.js",
     "generate_metadata": "node utils/art_engine/generate_metadata.js",
     "import_files": "node utils/custom/import_files.js",
-    "import_layers_csv": "node utils/custom/import_layers_csv.js",
+    "import_new_config": "node utils/custom/import_new_config.js",
     "mint_batch": "node utils/nftport/mint_batch.js",
     "mint_item": "node utils/nftport/mint_item.js",
     "mint_range": "node utils/nftport/mint_range.js",

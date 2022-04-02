@@ -55,10 +55,11 @@ build/
 dist/
 node_modules/
 jspm_packages/
-src/config_new.js
+src/config_new.json
 yarn.lock
 package-lock.json
 export.csv
+Layers.xlsx
 
 # TypeScript v1 declaration files
 

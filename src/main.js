@@ -27,6 +27,7 @@ var attributesList = [];
 var dnaList = new Set();
 const DNA_DELIMITER = "-";
 const HashlipsGiffer = require(`${FOLDERS.modulesDir}/HashlipsGiffer.js`);
+const configNew = fs.existsSync(`${FOLDERS.sourceDir}/config_new.json`) ? require(`${FOLDERS.sourceDir}/config_new.json`) : {};
 
 const { needsFiltration } = require('./filters');
 
@@ -67,7 +68,7 @@ const cleanName = (_str) => {
   return nameWithoutWeight;
 };
 
-const getElements = (path) => {
+const getElements = (path, layer) => {
   return fs
     .readdirSync(path)
     .filter((item) => !/(^|\/)\.[^\/\.]/g.test(item))
@@ -75,20 +76,31 @@ const getElements = (path) => {
       if (i.includes(DNA_DELIMITER)) {
         throw new Error(`layer name can not contain "${DNA_DELIMITER}" characters, please fix: ${i}`);
       }
-      return {
+
+      const element = {
         id: index,
         name: cleanName(i),
         filename: i,
         path: `${path}${i}`,
         weight: getRarityWeight(i),
       };
+
+      if (configNew) {
+        const trait = configNew.traits.find(t => t.Path === `${layer}/${element.name}`);
+        if (!trait)
+          throw new Error(`No trait found for ${layer}/${element.name}`);
+
+        element.trait = trait;
+      }
+
+      return element;
     });
 };
 
 const layersSetup = (layersOrder) => {
   const layers = layersOrder.map((layerObj, index) => ({
     id: index,
-    elements: getElements(`${FOLDERS.layersDir}/${layerObj.name}/`),
+    elements: getElements(`${FOLDERS.layersDir}/${layerObj.name}/`, layerObj.name),
     name:
       layerObj.options?.["displayName"] != undefined
         ? layerObj.options?.["displayName"]
@@ -203,7 +215,7 @@ const addAttributes = (_element) => {
   }
 
   if (!ignore) {
-    addToAttrbutesList(_element.layer.name, selectedElement.name);
+    addToAttrbutesList(_element.layer.name, selectedElement.trait?.DisplayName ?? selectedElement.name);
   }
 };
 
@@ -273,7 +285,7 @@ const addText = (_sig, x, y, size) => {
   ctx.fillText(_sig, x, y);
 };
 
-const drawElement = (_renderObject, _index, _layersLen) => {
+const drawElement = (_renderObject, _index, _layersLen, _addAttributes) => {
   ctx.globalAlpha = _renderObject.layer.opacity;
   ctx.globalCompositeOperation = _renderObject.layer.blend;
   text.only
@@ -291,7 +303,8 @@ const drawElement = (_renderObject, _index, _layersLen) => {
         format.height
       );
 
-  addAttributes(_renderObject);
+  if (_addAttributes)
+    addAttributes(_renderObject);
 };
 
 const constructLayerToDna = (_dna = "", _layers = []) => {
@@ -355,30 +368,68 @@ const isDnaUnique = (_DnaList = new Set(), _dna = "") => {
   return !_DnaList.has(_filteredDNA);
 };
 
-const selectTraits = (layers) => {
+const selectTraits = (layers, id) => {
   let traits = [];
+  let depended_traits = {};
+  let incompatible_traits = {};
+
+  const fixed_edition = configNew?.fixed_editions?.find(e => id >= e['ID start'] && id <= e['ID end']);
+
+  function selectTrait(layer, element) {
+    if (element.trait) {
+      if (element.trait.DependentTraits) {
+        element.trait.DependentTraits.forEach(t => {
+          depended_traits[t.split('/')[0]] = true;
+          depended_traits[t] = true;
+        });
+      }
+      if (element.trait.IncompatibleTraits)
+        element.trait.IncompatibleTraits.forEach(t => incompatible_traits[t] = true);
+    }
+
+    traits.push({
+      layer: layer.name,
+      id: element.id,
+      name: element.name,
+      filename: element.filename,
+      bypassDNA: layer.bypassDNA,
+      maxRepeatedTrait: layer.maxRepeatedTrait,
+      noLayerMeta: layer.noLayerMeta,
+    });
+  }
+
   layers.forEach((layer) => {
+    if (fixed_edition && fixed_edition[layer.name]) {
+      const fixedElement = layer.elements.find(e => e.name === fixed_edition[layer.name]);
+      return selectTrait(layer, fixedElement);
+    }
+
+    const elements = layer.elements.filter(e => {
+      if (!configNew)
+        return true;
+
+      const trait = e.trait;
+
+      if (incompatible_traits[trait.Path])
+        return false;
+
+      if (depended_traits[trait.Layer])
+        return depended_traits[trait.Path];
+
+      return true;
+    });
+
     var totalWeight = 0;
-    layer.elements.forEach((element) => {
+    elements.forEach((element) => {
       totalWeight += element.weight;
     });
     // number between 0 - totalWeight
     let random = Math.floor(Math.random() * totalWeight);
-    for (var i = 0; i < layer.elements.length; i++) {
+    for (var i = 0; i < elements.length; i++) {
       // subtract the current weight from the random weight until we reach a sub zero value.
-      random -= layer.elements[i].weight;
-      if (random < 0) {
-        return traits.push({
-          layer: layer.name,
-          id: layer.elements[i].id,
-          name: layer.elements[i].name,
-          filename: layer.elements[i].filename,
-          bypassDNA: layer.bypassDNA,
-          maxRepeatedTrait: layer.maxRepeatedTrait,
-          noLayerMeta: layer.noLayerMeta,
-          },
-        );
-      }
+      random -= elements[i].weight;
+      if (random < 0)
+        return selectTrait(layer, elements[i]);
     }
   });
   return traits;
@@ -430,6 +481,17 @@ function shuffle(array) {
 }
 
 const startCreating = async () => {
+  if (configNew) {
+    layerConfigurations.forEach(layerConfiguration => {
+      layerConfiguration.incompatibleTraits = configNew.incompatible_traits;
+      layerConfiguration.dependentTraits = configNew.dependent_traits;
+    });
+
+    configNew.traits.filter(t => !fs.existsSync(`${FOLDERS.layersDir}/${t.Path}.png`)).forEach(t => {
+      throw new Error(`No file found for ${t.Path}`);
+    });
+  }
+
   let layerConfigIndex = 0;
   let editionCount = 1;
   let failedCount = 0;
@@ -466,7 +528,7 @@ const startCreating = async () => {
     while (
       editionCount <= layerConfigurations[layerConfigIndex].growEditionSizeTo
     ) {
-      const traits = selectTraits(layers);
+      const traits = selectTraits(layers, abstractedIndexes[0]);
       let newDna = createDna(traits);
       if (isDnaUnique(dnaList, newDna)) {
 
@@ -516,7 +578,8 @@ const startCreating = async () => {
               drawElement(
                 renderObject,
                 index,
-                layerConfigurations[layerConfigIndex].layersOrder.length
+                layerConfigurations[layerConfigIndex].layersOrder.length,
+                i === 0
               );
               if (gif.export) {
                 hashlipsGiffer.add();
@@ -535,9 +598,10 @@ const startCreating = async () => {
             if (gif.export) {
               hashlipsGiffer.stop();
             }
-            debugLogs
-              ? console.log("Editions left to create: ", abstractedIndexes)
-              : null;
+            if (i === 0)
+              debugLogs
+                ? console.log("Editions left to create: ", abstractedIndexes)
+                : null;
             saveImage(badges[i]?.prefix, abstractedIndexes[0]);
             if (i === 0)
               addMetadata(newDna, badges[i]?.prefix, abstractedIndexes[0]);
