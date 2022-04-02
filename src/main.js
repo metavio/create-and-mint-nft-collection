@@ -421,13 +421,13 @@ const selectTraits = (layers, id) => {
 
     var totalWeight = 0;
     elements.forEach((element) => {
-      totalWeight += element.weight;
+      totalWeight += element.trait.Weight;
     });
     // number between 0 - totalWeight
     let random = Math.floor(Math.random() * totalWeight);
     for (var i = 0; i < elements.length; i++) {
       // subtract the current weight from the random weight until we reach a sub zero value.
-      random -= elements[i].weight;
+      random -= elements[i].trait.Weight;
       if (random < 0)
         return selectTrait(layer, elements[i]);
     }
