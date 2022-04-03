@@ -60,6 +60,7 @@ yarn.lock
 package-lock.json
 export.csv
 Layers.xlsx
+output.log
 
 # TypeScript v1 declaration files
 

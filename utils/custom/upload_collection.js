@@ -36,6 +36,7 @@ async function updateAndUploadMetas(images_cid) {
     function replaceContent(content) {
         content.file_url = content.file_url.replace('ADD_IPFS_IMAGE_CID_HERE', images_cid.toString());
         content.image = content.image.replace('ADD_IPFS_IMAGE_CID_HERE', images_cid.toString());
+        delete content.hiddenAttributes;
     }
     file_names.forEach(file_name => {
         const content = JSON.parse(fs.readFileSync(file_name));

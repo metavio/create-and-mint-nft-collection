@@ -2,36 +2,29 @@ const fs = require("fs");
 const BASEDIR = process.cwd();
 const { FOLDERS } = require(`${BASEDIR}/constants/folders.js`);
 const sha1 = require(`${FOLDERS.nodeModulesDir}/sha1`);
-const { createCanvas, loadImage } = require(`${FOLDERS.nodeModulesDir}/canvas`);
+const { loadImage } = require(`${FOLDERS.nodeModulesDir}/canvas`);
 const { NETWORK } = require(`${FOLDERS.constantsDir}/network.js`);
 const { NFT_DETAILS } = require(`${FOLDERS.constantsDir}/nft_details.js`);
+const shell = require('child_process').execSync;
 const {
-  format,
-  background,
   uniqueDnaTorrance,
   layerConfigurations,
   rarityDelimiter,
   shuffleLayerConfigurations,
   debugLogs,
   extraMetadata,
-  text,
   network,
   solanaMetadata,
   gif,
 } = require(`${FOLDERS.sourceDir}/config.js`);
-const canvas = createCanvas(format.width, format.height);
-const ctx = canvas.getContext("2d");
-ctx.imageSmoothingEnabled = format.smoothing;
 var metadataList = [];
 var attributesList = [];
+var hiddenAttributesList = [];
 var dnaList = new Set();
 const DNA_DELIMITER = "-";
-const HashlipsGiffer = require(`${FOLDERS.modulesDir}/HashlipsGiffer.js`);
 const configNew = fs.existsSync(`${FOLDERS.sourceDir}/config_new.json`) ? require(`${FOLDERS.sourceDir}/config_new.json`) : {};
 
 const { needsFiltration } = require('./filters');
-
-let hashlipsGiffer = null;
 
 const buildSetup = () => {
   if (fs.existsSync(FOLDERS.buildDir)) {
@@ -126,24 +119,6 @@ const layersSetup = (layersOrder) => {
   return layers;
 };
 
-const saveImage = (prefix, _editionCount) => {
-  fs.writeFileSync(
-    `${FOLDERS.imagesDir}/${prefix ?? ''}${_editionCount}.png`,
-    canvas.toBuffer("image/png")
-  );
-};
-
-const genColor = () => {
-  let hue = Math.floor(Math.random() * 360);
-  let pastel = `hsl(${hue}, 100%, ${background.brightness})`;
-  return pastel;
-};
-
-const drawBackground = () => {
-  ctx.fillStyle = background.static ? background.default : genColor();
-  ctx.fillRect(0, 0, format.width, format.height);
-};
-
 const addMetadata = (_dna, prefix, _edition) => {
   let dateTime = Date.now();
   let tempMetadata = {
@@ -152,6 +127,7 @@ const addMetadata = (_dna, prefix, _edition) => {
     file_url: `${NFT_DETAILS.imageFilesBase}/${prefix ?? ''}${_edition}.png`,
     image: `${NFT_DETAILS.imageFilesBase}/${prefix ?? ''}${_edition}.png`,
     attributes: attributesList,
+    hiddenAttributes: hiddenAttributesList,
     custom_fields: {
       dna: sha1(_dna),
       edition: _edition,
@@ -194,6 +170,7 @@ const addMetadata = (_dna, prefix, _edition) => {
   }
   metadataList.push(tempMetadata);
   attributesList = [];
+  hiddenAttributesList = [];
 };
 
 const addAttributes = (_element) => {
@@ -216,6 +193,8 @@ const addAttributes = (_element) => {
 
   if (!ignore) {
     addToAttrbutesList(_element.layer.name, selectedElement.trait?.DisplayName ?? selectedElement.name);
+  } else {
+    addToHiddenAttributesList(_element.layer.name, selectedElement.trait?.DisplayName ?? selectedElement.name);
   }
 };
 
@@ -226,17 +205,12 @@ function addToAttrbutesList(_layerName, _elementValue) {
   });
 }
 
-const loadLayerImg = async (_layer) => {
-  try {
-    const image = await loadImage(`${_layer.selectedElement.path}`);
-    return { 
-      layer: _layer, 
-      loadedImage: image 
-    };
-  } catch (error) {
-    console.error("Error loading image:", error);
-  }
-};
+function addToHiddenAttributesList(_layerName, _elementValue) {
+  hiddenAttributesList.push({
+    trait_type: _layerName,
+    value: _elementValue
+  });
+}
 
 const loadAndPrepareBadges = async () => {
   if (!fs.existsSync(FOLDERS.badgesDir))
@@ -275,36 +249,6 @@ const loadAndPrepareBadges = async () => {
   });
 
   return badges;
-};
-
-const addText = (_sig, x, y, size) => {
-  ctx.fillStyle = text.color;
-  ctx.font = `${text.weight} ${size}pt ${text.family}`;
-  ctx.textBaseline = text.baseline;
-  ctx.textAlign = text.align;
-  ctx.fillText(_sig, x, y);
-};
-
-const drawElement = (_renderObject, _index, _layersLen, _addAttributes) => {
-  ctx.globalAlpha = _renderObject.layer.opacity;
-  ctx.globalCompositeOperation = _renderObject.layer.blend;
-  text.only
-    ? addText(
-        `${_renderObject.layer.name}${text.spacer}${_renderObject.layer.selectedElement.name}`,
-        text.xGap,
-        text.yGap * (_index + 1),
-        text.size
-      )
-    : ctx.drawImage(
-        _renderObject.loadedImage,
-        0,
-        0,
-        format.width,
-        format.height
-      );
-
-  if (_addAttributes)
-    addAttributes(_renderObject);
 };
 
 const constructLayerToDna = (_dna = "", _layers = []) => {
@@ -549,71 +493,11 @@ const startCreating = async () => {
           continue;
         }
 
-        let results = constructLayerToDna(newDna, layers);
-        let loadedElements = [];
+        constructLayerToDna(newDna, layers).forEach(layer => addAttributes({ layer }));
+        addMetadata(newDna, badges[0]?.prefix, abstractedIndexes[0]);
+        saveMetaDataSingleFile(badges[0]?.prefix, abstractedIndexes[0]);
+        console.log(`Created edition metadata: ${abstractedIndexes[0]}, with DNA: ${sha1(newDna)} (tries: ${failedCount})`);
 
-        results.forEach((layer) => {
-          loadedElements.push(loadLayerImg(layer));
-        });
-
-        await Promise.all(loadedElements).then((renderObjectArray) => {
-          for (let i = 0; i < badges.length; i++) {
-            debugLogs ? console.log("Clearing canvas") : null;
-            ctx.clearRect(0, 0, format.width, format.height);
-            if (gif.export) {
-              hashlipsGiffer = new HashlipsGiffer(
-                canvas,
-                ctx,
-                `${FOLDERS.gifsDir}/${abstractedIndexes[0]}.gif`,
-                gif.repeat,
-                gif.quality,
-                gif.delay
-              );
-              hashlipsGiffer.start();
-            }
-            if (background.generate) {
-              drawBackground();
-            }
-            renderObjectArray.forEach((renderObject, index) => {
-              drawElement(
-                renderObject,
-                index,
-                layerConfigurations[layerConfigIndex].layersOrder.length,
-                i === 0
-              );
-              if (gif.export) {
-                hashlipsGiffer.add();
-              }
-            });
-            if (badges[i]) {
-              drawElement(
-                badges[i],
-                renderObjectArray.length,
-                layerConfigurations[layerConfigIndex].layersOrder.length
-              );
-              if (gif.export) {
-                hashlipsGiffer.add();
-              }
-            }
-            if (gif.export) {
-              hashlipsGiffer.stop();
-            }
-            if (i === 0)
-              debugLogs
-                ? console.log("Editions left to create: ", abstractedIndexes)
-                : null;
-            saveImage(badges[i]?.prefix, abstractedIndexes[0]);
-            if (i === 0)
-              addMetadata(newDna, badges[i]?.prefix, abstractedIndexes[0]);
-            saveMetaDataSingleFile(badges[i]?.prefix, abstractedIndexes[0]);
-            if (i === 0)
-              console.log(
-                `Created edition: ${abstractedIndexes[0]}, with DNA: ${sha1(
-                  newDna
-                )} (tries: ${failedCount})`
-              );
-          }
-        });
         dnaList.add(filterDNAOptions(newDna));
         selectedTraitsList.add(traits);
         editionCount++;
@@ -633,7 +517,38 @@ const startCreating = async () => {
     }
     layerConfigIndex++;
   }
+
+  for (let i = 1; i < badges.length; i++)
+    shell(`cp -r ${FOLDERS.jsonDir}/${badges[0].prefix} ${FOLDERS.jsonDir}/${badges[i].prefix}`);
+
   writeMetaData(JSON.stringify(metadataList, null, 2));
+
+  const collectedAttributes = {};
+  metadataList.forEach(metadata => {
+    [...metadata.attributes, ...metadata.hiddenAttributes].forEach(a => {
+      if (!collectedAttributes[a.trait_type])
+        collectedAttributes[a.trait_type] = {};
+      if (!collectedAttributes[a.trait_type][a.value])
+        collectedAttributes[a.trait_type][a.value] = 0;
+      collectedAttributes[a.trait_type][a.value]++;
+    });
+  });
+
+  console.log(`Attributes exported to ${FOLDERS.buildDir}/attributes.json`);
+  fs.writeFileSync(`${FOLDERS.buildDir}/attributes.json`, JSON.stringify(collectedAttributes, null, 2));
+
+  const total_size = metadataList.length;
+  const chunk_size = 100;
+  const chunks = Math.ceil(total_size / chunk_size);
+  for (let i = 0; i < chunks; i++) {
+    const start = i * chunk_size;
+    let end = ((i + 1) * chunk_size) - 1;
+    if (end >= total_size)
+      end = total_size - 1;
+
+    console.log(`Creating edition images. Batch size: ${chunk_size}, Current Chunk: ${i + 1}/${chunks}, for more details check ${FOLDERS.buildDir}/output.log`);
+    shell(`./metadata2image-batch-job.sh ${FOLDERS.jsonDir}/${badges[0].prefix} ${start} ${end}`);
+  }
 };
 
 module.exports = { startCreating, buildSetup, getElements };
