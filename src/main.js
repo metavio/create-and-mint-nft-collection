@@ -431,9 +431,30 @@ const startCreating = async () => {
       layerConfiguration.dependentTraits = configNew.dependent_traits;
     });
 
-    configNew.traits.filter(t => !fs.existsSync(`${FOLDERS.layersDir}/${t.Path}.png`)).forEach(t => {
-      throw new Error(`No file found for ${t.Path}`);
+    let errors = '';
+    configNew.traits.forEach(t => {
+      if (!fs.existsSync(`${FOLDERS.layersDir}/${t.Path}.png`))
+        errors += `No file found for ${t.Path}\n`;
+      configNew.DependentTraits?.forEach(dt => {
+        if (!configNew.traits.find(t2 => t2.Path === dt))
+          errors += `No trait found for dependent trait ${dt} of ${t2.Path}\n`;
+      });
+      configNew.IncompatibleTraits?.forEach(it => {
+        if (!configNew.traits.find(t2 => t2.Path === it))
+          errors += `No trait found for incompatible trait ${it} of ${t2.Path}\n`;
+      });
     });
+    configNew.fixed_editions.forEach(fe => {
+      configNew.layers.forEach(l => {
+        if (fe[l.name]) {
+          const path = `${l.name}/${fe[l.name]}`;
+          if (!configNew.traits.find(t => t.Path === path))
+            errors += `No trait found for ${path} of fixed edition #${fe['ID start']} - #${fe['ID end']}\n`;
+        }
+      });
+    });
+    if (errors)
+      throw new Error(errors);
   }
 
   let layerConfigIndex = 0;
@@ -523,19 +544,46 @@ const startCreating = async () => {
 
   writeMetaData(JSON.stringify(metadataList, null, 2));
 
+  const relation = metadataList.length / 10000;
   const collectedAttributes = {};
   metadataList.forEach(metadata => {
     [...metadata.attributes, ...metadata.hiddenAttributes].forEach(a => {
       if (!collectedAttributes[a.trait_type])
         collectedAttributes[a.trait_type] = {};
-      if (!collectedAttributes[a.trait_type][a.value])
-        collectedAttributes[a.trait_type][a.value] = 0;
-      collectedAttributes[a.trait_type][a.value]++;
+      if (!collectedAttributes[a.trait_type][a.value]) {
+        const ecxpected = configNew?.traits?.find(t => t.Layer === a.trait_type && t.DisplayName === a.value)?.Editions ?? 0;
+        collectedAttributes[a.trait_type][a.value] = {
+          expected: ecxpected,
+          expectedScaled: Math.round(ecxpected * relation),
+          actual: 0
+        };
+      }
+      collectedAttributes[a.trait_type][a.value].actual++;
     });
   });
 
-  console.log(`Attributes exported to ${FOLDERS.buildDir}/attributes.json`);
+  console.log(`Attributes json exported to ${FOLDERS.buildDir}/attributes.json`);
   fs.writeFileSync(`${FOLDERS.buildDir}/attributes.json`, JSON.stringify(collectedAttributes, null, 2));
+
+  const csv = [[
+    'Layer',
+    'DisplayName',
+    'Expected',
+    'Expected (Scaled)',
+    'Actual'
+  ]];
+  for (const layer in collectedAttributes) {
+    for (const displayName in collectedAttributes[layer]) {
+      csv.push([
+        layer,
+        displayName,
+        ...Object.values(collectedAttributes[layer][displayName])
+      ]);
+    }
+  }
+
+  console.log(`Attributes csv exported to ${FOLDERS.buildDir}/attributes.csv`);
+  fs.writeFileSync(`${FOLDERS.buildDir}/attributes.csv`, csv.map(r => r.join(',')).join('\n'));
 
   const total_size = metadataList.length;
   const chunk_size = 100;
