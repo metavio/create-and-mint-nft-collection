@@ -180,7 +180,7 @@ async function main() {
   const metadata = JSON.parse(fs.readFileSync(path));
   
   const attributes = {};
-  [...metadata.attributes, ...metadata.hiddenAttributes].forEach(a => {
+  metadata.hiddenAttributes.forEach(a => {
     attributes[a.trait_type] = a.value;
   });
 
@@ -189,7 +189,7 @@ async function main() {
     const value = attributes[layer];
     const id = `${layer}/${value}`;
     if (!imageCache[id]) {
-      const path = `${FOLDERS.layersDir}/${configNew.traits.find(t => t.Layer === layer && t.DisplayName === value).Path}.png`;
+      const path = `${FOLDERS.layersDir}/${configNew.traits.find(t => t.Layer === layer && t.FileName === value).Path}.png`;
       const image = await loadImage(path);
       imageCache[id] = image;
     }

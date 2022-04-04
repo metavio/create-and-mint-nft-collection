@@ -191,11 +191,9 @@ const addAttributes = (_element) => {
     ignore = true;
   }
 
-  if (!ignore) {
+  if (!ignore)
     addToAttrbutesList(_element.layer.name, selectedElement.trait?.DisplayName ?? selectedElement.name);
-  } else {
-    addToHiddenAttributesList(_element.layer.name, selectedElement.trait?.DisplayName ?? selectedElement.name);
-  }
+  addToHiddenAttributesList(_element.layer.name, selectedElement.trait?.FileName ?? selectedElement.name);
 };
 
 function addToAttrbutesList(_layerName, _elementValue) {
@@ -547,14 +545,14 @@ const startCreating = async () => {
   const relation = metadataList.length / 10000;
   const collectedAttributes = {};
   metadataList.forEach(metadata => {
-    [...metadata.attributes, ...metadata.hiddenAttributes].forEach(a => {
+    metadata.hiddenAttributes.forEach(a => {
       if (!collectedAttributes[a.trait_type])
         collectedAttributes[a.trait_type] = {};
       if (!collectedAttributes[a.trait_type][a.value]) {
-        const ecxpected = configNew?.traits?.find(t => t.Layer === a.trait_type && t.DisplayName === a.value)?.Editions ?? 0;
+        const expected = configNew?.traits?.find(t => t.Layer === a.trait_type && t.FileName === a.value)?.Editions ?? 0;
         collectedAttributes[a.trait_type][a.value] = {
-          expected: ecxpected,
-          expectedScaled: Math.round(ecxpected * relation),
+          expected: expected,
+          expectedScaled: Math.round(expected * relation),
           actual: 0
         };
       }
@@ -567,17 +565,17 @@ const startCreating = async () => {
 
   const csv = [[
     'Layer',
-    'DisplayName',
+    'FileName',
     'Expected',
     'Expected (Scaled)',
     'Actual'
   ]];
   for (const layer in collectedAttributes) {
-    for (const displayName in collectedAttributes[layer]) {
+    for (const fileName in collectedAttributes[layer]) {
       csv.push([
         layer,
-        displayName,
-        ...Object.values(collectedAttributes[layer][displayName])
+        fileName,
+        ...Object.values(collectedAttributes[layer][fileName])
       ]);
     }
   }
