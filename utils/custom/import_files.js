@@ -88,10 +88,34 @@ async function getFiles() {
             fs.mkdirSync(path);
     });
 
-    await files.forEach(async file => {
+    await files.filter(file => !file.mimeType.includes('application/vnd.google-apps.')).forEach(async file => {
         const path = resolvePath(file, true);
-        await drive.getFile(file, path);
-        console.log(`Downloaded ${file.name} -> ${join(path, file.name)}`);
+        const fullPath = join(path, file.name);
+
+        let success = true;
+        let retry = true;
+        let i = 0;
+        while (retry) {
+            await drive.getFile(file, path);
+            success = true;
+            retry = false;
+            try {
+                const json = JSON.parse(fs.readFileSync(fullPath));
+                success = !json?.error;
+                retry = json?.error.message === 'Rate Limit Exceeded';
+            } catch (e) {}
+
+            if (retry) {
+                const timeout = Math.pow(2, i++) * 1000;
+                console.log(`Retry download of ${file.name} in ${timeout}ms`);
+                await new Promise(resolve => setTimeout(resolve, timeout));
+            }
+        }
+
+        if (success)
+            console.log(`Downloaded ${file.name} -> ${fullPath}`);
+        else
+            console.error(`Download failed for ${file.name}`);
     });
 }
 
