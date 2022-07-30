@@ -447,7 +447,7 @@ const startCreating = async () => {
         if (fe[l.name]) {
           const path = `${l.name}/${fe[l.name]}`;
           if (!configNew.traits.find(t => t.Path === path))
-            errors += `No trait found for ${path} of fixed edition #${fe['ID start']} - #${fe['ID end']}\n`;
+            errors += `No trait found for ${path} of fixed edition #${fe.ID}\n`;
         }
       });
     });
