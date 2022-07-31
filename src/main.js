@@ -315,7 +315,7 @@ const selectTraits = (layers, id) => {
   let depended_traits = {};
   let incompatible_traits = {};
 
-  const fixed_edition = configNew?.fixed_editions?.find(e => id >= e['ID start'] && id <= e['ID end']);
+  const fixed_edition = configNew?.fixed_editions?.find(e => id >= e.ID);
 
   function selectTrait(layer, element) {
     if (element.trait) {
