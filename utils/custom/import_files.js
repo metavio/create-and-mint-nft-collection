@@ -85,7 +85,7 @@ async function getFiles() {
     folders.forEach(folder => {
         const path = resolvePath(folder);
         if (!fs.existsSync(path))
-            fs.mkdirSync(path);
+            fs.mkdirSync(path, { recursive: true });
     });
 
     await files.filter(file => !file.mimeType.includes('application/vnd.google-apps.')).forEach(async file => {

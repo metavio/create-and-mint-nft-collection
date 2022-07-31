@@ -593,7 +593,7 @@ const startCreating = async () => {
       end = total_size - 1;
 
     console.log(`Creating edition images. Batch size: ${chunk_size}, Current Chunk: ${i + 1}/${chunks}, for more details check ${FOLDERS.buildDir}/output.log`);
-    shell(`./metadata2image-batch-job.sh ${FOLDERS.jsonDir}/${badges[0].prefix} ${start} ${end}`);
+    shell(`./metadata2image-batch-job.sh ${FOLDERS.jsonDir}/${badges[0]?.prefix ?? ''} ${start} ${end}`);
   }
 };
 
