@@ -96,14 +96,20 @@ async function getFiles() {
         let retry = true;
         let i = 0;
         while (retry) {
-            await drive.getFile(file, path);
-            success = true;
-            retry = false;
             try {
-                const json = JSON.parse(fs.readFileSync(fullPath));
-                success = !json?.error;
-                retry = json?.error.message === 'Rate Limit Exceeded';
-            } catch (e) {}
+                await drive.getFile(file, path);
+                success = true;
+                retry = false;
+                try {
+                    const json = JSON.parse(fs.readFileSync(fullPath));
+                    success = !json?.error;
+                    retry = json?.error.message === 'Rate Limit Exceeded' || json?.error?.message?.startsWith('User Rate Limit Exceeded');
+                    fs.rmSync(fullPath);
+                } catch (e) {}
+            } catch (e) {
+                success = false;
+                retry = true;
+            }
 
             if (retry) {
                 const timeout = Math.pow(2, i++) * 1000;
